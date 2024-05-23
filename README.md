@@ -58,7 +58,7 @@ print(text_results)
   ocr_models_directory/user_network/best_accuracy.py
   ocr_models_directory/user_network/best_accuracy.yaml
   ```
-  
+
   Пример структуры папки:
   ```
   path/to/ocr/models/
@@ -75,4 +75,8 @@ print(text_results)
 
   Пример структуры можно найти в папке `models_directory_example`.
 
-Этот скрипт загружает изображение, выполняет детекцию объектов с помощью YOLO и распознавание текста с помощью EasyOCR, а затем выводит результаты распознавания текста в виде списка кортежей, где каждый кортеж содержит координаты bounding box и распознанный текст.
+- Модель для детекции строк YOLO9 можно скачать по следующей ссылке:
+  [YOLO9 модель для детекции строк](https://drive.google.com/file/d/1I56uvn7kAMZIh7AZfDIIwjAysJj_sdu7/view?usp=sharing)
+
+- Модели для распознавания текста OCR можно скачать по следующей ссылке:
+  [Модели для распознавания текста OCR](https://drive.google.com/drive/folders/1c8U6gk4qBdjvvi1zU8UEQc_gmS0B3NUK?usp=sharing)
