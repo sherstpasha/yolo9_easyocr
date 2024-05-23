@@ -1,3 +1,6 @@
 [submodule "yolo9"]
 	path = yolo9
 	url = https://github.com/sherstpasha/yolov9
+[submodule "easyocr"]
+	path = easyocr
+	url = https://github.com/sherstpasha/EasyOCR
