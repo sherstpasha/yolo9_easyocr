@@ -80,3 +80,7 @@ print(text_results)
 
 - Модели для распознавания текста OCR можно скачать по следующей ссылке:
   [Модели для распознавания текста OCR](https://drive.google.com/drive/folders/1c8U6gk4qBdjvvi1zU8UEQc_gmS0B3NUK?usp=sharing)
+
+- Модель для распознавания текста TrOCR можно скачать по следующей ссылке:
+  [Модели для распознавания текста OCR](https://drive.google.com/drive/folders/1OL-AxBqs0_hiC61hYc8dCwEEW3E8HuuJ?usp=sharing)
+
