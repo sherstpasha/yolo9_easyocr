@@ -5,6 +5,10 @@ from easyocr.recognize_function import recognize_text_from_images
 from transformers import TrOCRProcessor, VisionEncoderDecoderModel, Seq2SeqTrainer, Seq2SeqTrainingArguments, GenerationConfig
 import torch
 from torch.nn.utils.rnn import pad_sequence
+import numpy as np
+from easyocr.easyocr import Reader
+from PIL import Image, ImageDraw
+from scipy.spatial import ConvexHull
 
 
 def crop_box_from_image(image, box):
@@ -234,3 +238,171 @@ def train_trocr(train_csv, train_root, val_csv, val_root, model_name, output_dir
     # Create and save the GenerationConfig object
     generation_config = GenerationConfig(max_length=64)
     generation_config.save_pretrained(output_dir)
+
+
+
+
+
+
+import os
+
+
+def convert_boxes_to_points(boxes):
+    """
+    Преобразует боксы из формата [x_min, x_max, y_min, y_max] в формат [[x1, y1], [x2, y2], [x3, y3], [x4, y4]].
+
+    Parameters:
+    boxes (list): Список боксов, где каждый бокс представлен координатами [x_min, x_max, y_min, y_max].
+
+    Returns:
+    list: Преобразованный список боксов в формате [[x1, y1], [x2, y2], [x3, y3], [x4, y4]].
+    """
+    formatted_boxes = []
+    for box in boxes:
+        x_min, x_max, y_min, y_max = [max(0, coord) for coord in box]
+        formatted_box = [[x_min, y_min], [x_max, y_min], [x_max, y_max], [x_min, y_max]]
+        formatted_boxes.append(formatted_box)
+    return formatted_boxes
+
+def group_boxes_into_lines(boxes):
+
+    def get_x_coordinates(box):
+        x_coords = [point[0] for point in box]
+        min_x = min(x_coords)
+        max_x = max(x_coords)
+        mean_x = sum(x_coords) / len(x_coords)
+        return min_x, max_x, mean_x
+
+    # Группировка боксов в строки
+    points = np.array([get_x_coordinates(box) for box in boxes])
+    min_x_points, max_x_points, mean_x_points = points[:, 0], points[:, 1], points[:, 2]
+
+    cond = mean_x_points[:-1] > min_x_points[1:]
+    cond = np.hstack([[True], cond])
+
+    grouped_lines = []
+    current_line = []
+
+    for box, is_new_line in zip(boxes, cond):
+        if is_new_line:
+            if current_line:
+                grouped_lines.append(current_line)
+            current_line = [box]
+        else:
+            current_line.append(box)
+
+    if current_line:
+        grouped_lines.append(current_line)
+
+    combined_polygons = []
+
+    for line in grouped_lines:
+        if not line:
+            continue
+
+        points = []
+        for box in line:
+            points.extend(box)
+
+        points = np.array(points)
+        hull = ConvexHull(points)
+        hull_points = points[hull.vertices]
+
+        combined_polygons.append(hull_points.tolist())
+
+    return grouped_lines, combined_polygons
+
+
+def crop_polygon(image_np, polygon):
+    """
+    Вырезает часть изображения по полигону с белым фоном.
+
+    Parameters:
+    image_np (numpy.ndarray): Входное изображение в формате numpy array.
+    polygon (list): Полигон, представленный списком точек [[x1, y1], [x2, y2], ...].
+
+    Returns:
+    numpy.ndarray: Вырезанная часть изображения.
+    tuple: Bounding box координаты (x_min, y_min, x_max, y_max).
+    """
+    # Преобразуем координаты полигона в целые числа
+    polygon = [(int(x), int(y)) for x, y in polygon]
+
+    # Создаем маску
+    mask = Image.new('L', (image_np.shape[1], image_np.shape[0]), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.polygon(polygon, outline=1, fill=1)
+    mask = np.array(mask)
+
+    # Создаем белый фон
+    white_background = np.ones_like(image_np) * 255
+
+    # Применяем маску к изображению
+    masked_image_np = np.where(mask[..., None], image_np, white_background)
+
+    # Обрезаем по минимальной и максимальной границам полигона
+    x_min, y_min = np.min(polygon, axis=0)
+    x_max, y_max = np.max(polygon, axis=0)
+    bbox = (x_min, y_min, x_max, y_max)
+    cropped_image_np = masked_image_np[y_min:y_max, x_min:x_max]
+
+    return cropped_image_np, bbox
+
+def detect_image_craft(image, ocr_gpu=False, return_only_lines=True):
+
+    # Инициализация EasyOCR Reader
+    reader = Reader(['ru'],
+                    gpu=ocr_gpu, recognizer=None)
+
+    # Определение текста с ограничивающими рамками
+    boxes, _ = reader.detect(image, slope_ths=1., reformat = False)
+
+    # Преобразование боксов в нужный формат
+    formatted_boxes = convert_boxes_to_points(boxes[0])
+
+    # Группируем боксы в строки и создаем полигоны
+    grouped_lines, combined_polygons = group_boxes_into_lines(formatted_boxes)
+
+    if return_only_lines:
+        return combined_polygons
+    else:
+        return formatted_boxes, grouped_lines, combined_polygons
+
+
+def extract_text_from_imageEasyOcrTrOCR(image_or_path, TrOCR_directory, craft_gpu=False, ocr_gpu=False):
+    
+    # Проверяем, является ли входное изображение путем или numpy.ndarray
+    if isinstance(image_or_path, str):
+        image = cv2.imread(image_or_path)
+        if image is None:
+            raise ValueError("Невозможно загрузить изображение по указанному пути.")
+    elif isinstance(image_or_path, np.ndarray):
+        image = image_or_path
+    else:
+        raise ValueError("image_or_path должен быть либо строкой пути, либо объектом numpy.ndarray")
+
+    # Обнаруживаем bounding boxes
+    polygons = detect_image_craft(image=image,
+                                  ocr_gpu=craft_gpu,
+                                  return_only_lines=True)
+
+    # Вырезаем bounding boxes из изображения
+    cropped_images, boxes = zip(*tuple([crop_polygon(image, polygon) for polygon in polygons]))
+
+    # Создаем папку output, если ее нет
+    output_dir = "output"
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Сохраняем каждое обрезанное изображение
+    for idx, cropped_image in enumerate(cropped_images):
+        if cropped_image.shape[1] > 0:
+            cropped_image_pil = Image.fromarray(cropped_image)
+            cropped_image_pil.save(os.path.join(output_dir, f"cropped_image_{idx+1}.jpg"))
+
+    # Распознаем текст из вырезанных изображений
+    recognized_texts = recognize_text_from_imagesTrOCR(image_pieces=cropped_images, models_directory=TrOCR_directory, gpu=ocr_gpu)
+
+    # # Формируем результат в формате [([x1, y1, x2, y2], "string"), ...]
+    results = [([box[0], box[1], box[2], box[3]], text) for box, text in zip(boxes, recognized_texts)]
+
+    return results
