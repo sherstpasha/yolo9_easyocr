@@ -444,7 +444,7 @@ def extract_text_from_imageEasyOcrOnly(image_or_path, ocr_models_directory, reco
     cropped_images, boxes = zip(*tuple([crop_polygon(image, polygon) for polygon in polygons]))
 
     # Распознаем текст из вырезанных изображений
-    recognized_texts = recognize_text_from_images(image_pieces=cropped_images, models_directory=ocr_models_directory, recog_network=recog_network, gpu=False)
+    recognized_texts = recognize_text_from_images(image_pieces=cropped_images, models_directory=ocr_models_directory, recog_network=recog_network, gpu=ocr_gpu)
 
     # Формируем результат в формате [([x1, y1, x2, y2], "string"), ...]
     results = [([box['bbox'][0], box['bbox'][1], box['bbox'][2], box['bbox'][3]], text) for box, text in zip(boxes, recognized_texts)]
